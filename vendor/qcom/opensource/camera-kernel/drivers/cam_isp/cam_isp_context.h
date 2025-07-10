@@ -290,8 +290,6 @@ struct cam_isp_context_event_record {
  * @v4l2_event_sub_ids         contains individual bits representing subscribed v4l2 ids
  * @aeb_enabled:               Indicate if stream is for AEB
  * @do_internal_recovery:      Enable KMD halt/reset/resume internal recovery
- * @try_reapply_count:         Try re-apply count while facing fatal error
- * @reapply_req_id:            Try re-apply request id while facing fatal error
  *
  */
 struct cam_isp_context {
@@ -349,8 +347,6 @@ struct cam_isp_context {
 	uint32_t                              v4l2_event_sub_ids;
 	bool                                  aeb_enabled;
 	bool                                  do_internal_recovery;
-	uint32_t                              try_reapply_count;
-	int64_t                               reapply_req_id;
 };
 
 /**

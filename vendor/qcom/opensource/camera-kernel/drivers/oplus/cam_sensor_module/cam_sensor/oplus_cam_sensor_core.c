@@ -211,6 +211,7 @@ int cam_ftm_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 		s_ctrl->sensordata->slave_info.sensor_id == 0x3109||
 		s_ctrl->sensordata->slave_info.sensor_id == 0xe000||
 		s_ctrl->sensordata->slave_info.sensor_id == 0x581 ||
+		s_ctrl->sensordata->slave_info.sensor_id == 0x5664||
 		s_ctrl->sensordata->slave_info.sensor_id == 0x890)
 	{
 		sensor_setting.reg_setting = sensor_settings.streamoff.reg_setting;
@@ -545,6 +546,16 @@ int cam_ftm_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 			sensor_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
 			sensor_setting.size = sensor_settings.imx890_setting.size;
 			sensor_setting.delay = sensor_settings.imx890_setting.delay;
+			rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_setting);
+		}
+		else if (s_ctrl->sensordata->slave_info.sensor_id == 0x5664)
+		{
+			CAM_ERR(CAM_SENSOR, "FTM sensor setting 0x%x",s_ctrl->sensordata->slave_info.sensor_id);
+			sensor_setting.reg_setting = sensor_settings.ov64b_setting.reg_setting;
+			sensor_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+			sensor_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+			sensor_setting.size = sensor_settings.ov64b_setting.size;
+			sensor_setting.delay = sensor_settings.ov64b_setting.delay;
 			rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_setting);
 		}
 		else
@@ -1148,20 +1159,41 @@ int sensor_start_thread(void *arg)
 			}
 			else if(s_ctrl->sensordata->slave_info.sensor_id == 0x0766)
 			{
-				sensor_init_setting.reg_setting = sensor_init_settings.imx766_setting.reg_setting;
-				sensor_init_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
-				sensor_init_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
-				sensor_init_setting.size = sensor_init_settings.imx766_setting.size;
-				sensor_init_setting.delay = sensor_init_settings.imx766_setting.delay;
-				rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_init_setting);
-				if(rc < 0)
+				if(s_ctrl->power_up_advance == 1)
 				{
-					CAM_ERR(CAM_SENSOR, "write 766 setting failed!");
+					sensor_init_setting.reg_setting = sensor_init_settings.imx766_ferrari_setting.reg_setting;
+					sensor_init_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+					sensor_init_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+					sensor_init_setting.size = sensor_init_settings.imx766_ferrari_setting.size;
+					sensor_init_setting.delay = sensor_init_settings.imx766_ferrari_setting.delay;
+					rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_init_setting);
+					if(rc < 0)
+					{
+						CAM_ERR(CAM_SENSOR, "write 766 setting failed!");
+					}
+					else
+					{
+						CAM_INFO(CAM_SENSOR, "write 766 setting success!");
+						s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
+					}
 				}
 				else
 				{
-					CAM_INFO(CAM_SENSOR, "write 766 setting success!");
-					s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
+					sensor_init_setting.reg_setting = sensor_init_settings.imx766_setting.reg_setting;
+					sensor_init_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+					sensor_init_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+					sensor_init_setting.size = sensor_init_settings.imx766_setting.size;
+					sensor_init_setting.delay = sensor_init_settings.imx766_setting.delay;
+					rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_init_setting);
+					if(rc < 0)
+					{
+						CAM_ERR(CAM_SENSOR, "write 766 setting failed!");
+					}
+					else
+					{
+						CAM_INFO(CAM_SENSOR, "write 766 setting success!");
+						s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
+					}
 				}
 			}
 			else if(s_ctrl->sensordata->slave_info.sensor_id == 0x0890)
@@ -1325,6 +1357,24 @@ int sensor_start_thread(void *arg)
 				else
 				{
 					CAM_INFO(CAM_SENSOR, "write ov32c setting success!");
+					s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
+				}
+			}
+			else if(s_ctrl->sensordata->slave_info.sensor_id == 0x5664)
+			{
+				sensor_init_setting.reg_setting = sensor_init_settings.ov64b_senna_setting.reg_setting;
+				sensor_init_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+				sensor_init_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+				sensor_init_setting.size = sensor_init_settings.ov64b_senna_setting.size;
+				sensor_init_setting.delay = sensor_init_settings.ov64b_senna_setting.delay;
+				rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_init_setting);
+				if(rc < 0)
+				{
+					CAM_INFO(CAM_SENSOR, "write ov64b setting failed!");
+				}
+				else
+				{
+					CAM_INFO(CAM_SENSOR, "write ov64b setting success!");
 					s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_SUCCESS;
 				}
 			}

@@ -417,7 +417,6 @@ TRACE_EVENT(cam_tracing_mark_write,
 	)
 );
 
-
 #define STR_BUFFER_MAX_LENGTH  512
 const char* GetFileName(const char* pFilePath);
 extern pid_t camera_provider_pid;
@@ -428,20 +427,17 @@ do {                                                                            
 	snprintf(str_buffer+strlen(str_buffer), STR_BUFFER_MAX_LENGTH/2 - strlen(str_buffer), __VA_ARGS__);                     \
 	trace_cam_tracing_mark_write(str_buffer);                                                                                   \
 } while (0)
-
 #define trace_end()                                                                                                         \
 do {                                                                                                                        \
 	char str_buffer[STR_BUFFER_MAX_LENGTH/16] = {0};                                                                        \
 	snprintf(str_buffer, STR_BUFFER_MAX_LENGTH/16, "E|%d", camera_provider_pid);                                          \
 	trace_cam_tracing_mark_write(str_buffer);                                                                                   \
 } while (0)
-
 #define trace_begin_end(...)                                                                                                \
 do {                                                                                                                        \
 	trace_begin(__VA_ARGS__);                                                                                               \
 	trace_end();                                                                                                            \
 } while (0)
-
 #define trace_int(string, value)                                                                                            \
 do {                                                                                                                        \
 	char str_buffer[STR_BUFFER_MAX_LENGTH/4] = {0};                                                                         \

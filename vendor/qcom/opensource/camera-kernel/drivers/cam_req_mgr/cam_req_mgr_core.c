@@ -672,13 +672,15 @@ static void __cam_req_mgr_reset_req_slot(struct cam_req_mgr_core_link *link,
 	struct cam_req_mgr_req_tbl   *tbl = link->req.l_tbl;
 	struct cam_req_mgr_req_queue *in_q = link->req.in_q;
 
+	if (idx < 0)
+		return;
+
 	slot = &in_q->slot[idx];
 	CAM_DBG(CAM_CRM, "RESET: idx: %d: slot->status %d", idx, slot->status);
 
 	/* Check if CSL has already pushed new request*/
 	if (slot->status == CRM_SLOT_STATUS_REQ_ADDED ||
-		in_q->last_applied_idx == idx ||
-		idx < 0)
+		in_q->last_applied_idx == idx)
 		return;
 
 	/* Reset input queue slot */
@@ -842,8 +844,8 @@ static int __cam_req_mgr_check_next_req_slot(
 	 */
 	if (slot->status == CRM_SLOT_STATUS_REQ_APPLIED) {
 		CAM_WARN(CAM_CRM,
-			"slot [idx: %d req: %lld last_applied_idx: %d] was not reset, reset it now",
-			idx, in_q->slot[idx].req_id, in_q->last_applied_idx);
+			"slot[%d] wasn't reset, reset it now",
+			idx);
 		if (in_q->last_applied_idx == idx) {
 			CAM_WARN(CAM_CRM,
 				"last_applied_idx: %d",
@@ -866,8 +868,7 @@ static int __cam_req_mgr_check_next_req_slot(
 		if (in_q->wr_idx != idx)
 			CAM_WARN(CAM_CRM,
 				"CHECK here wr %d, rd %d", in_q->wr_idx, idx);
-		else
-			__cam_req_mgr_inc_idx(&in_q->wr_idx, 1, in_q->num_slots);
+		__cam_req_mgr_inc_idx(&in_q->wr_idx, 1, in_q->num_slots);
 	}
 
 	return rc;
@@ -2219,7 +2220,7 @@ static int __cam_req_mgr_process_req(struct cam_req_mgr_core_link *link,
 	 * - if in no_req state, no new req
 	 */
 	CAM_DBG(CAM_REQ,
-		"%s Req[%lld] idx %d req_status %d link_hdl %d wd_timeout %d ms trigger:%u",
+		"%s Req[%lld] idx %d req_status %d link_hdl %x wd_timeout %d ms trigger:%d",
 		((trigger == CAM_TRIGGER_POINT_SOF) ? "SOF" : "EOF"),
 		in_q->slot[in_q->rd_idx].req_id, in_q->rd_idx,
 		in_q->slot[in_q->rd_idx].status, link->link_hdl,
@@ -2442,7 +2443,8 @@ static int __cam_req_mgr_process_req(struct cam_req_mgr_core_link *link,
 				}
 			}
 
-			in_q->last_applied_idx = idx;
+			if (slot->req_id > 0)
+				in_q->last_applied_idx = idx;
 
 			__cam_req_mgr_dec_idx(
 				&idx, reset_step + 1,
@@ -3452,7 +3454,6 @@ void __cam_req_mgr_apply_on_bubble(
 int cam_req_mgr_process_error(void *priv, void *data)
 {
 	int                                  rc = 0, idx = -1;
-	int                                  i, slot_diff;
 	struct cam_req_mgr_error_notify     *err_info = NULL;
 	struct cam_req_mgr_core_link        *link = NULL;
 	struct cam_req_mgr_req_queue        *in_q = NULL;
@@ -3484,8 +3485,8 @@ int cam_req_mgr_process_error(void *priv, void *data)
 				"req_id %lld not found in input queue",
 				err_info->req_id);
 		} else {
-			CAM_DBG(CAM_CRM, "req_id %lld found at idx %d last_applied %d",
-				err_info->req_id, idx, in_q->last_applied_idx);
+			CAM_DBG(CAM_CRM, "req_id %lld found at idx %d",
+				err_info->req_id, idx);
 			slot = &in_q->slot[idx];
 			if (!slot->recover) {
 				CAM_WARN(CAM_CRM,
@@ -3512,31 +3513,13 @@ int cam_req_mgr_process_error(void *priv, void *data)
 				in_q->slot[idx].sync_mode = 0;
 			}
 
-			/*
-			 * Reset till last applied, even if there are scheduling delays
-			 * we start fresh from the request on which bubble has
-			 * been reported
-			 */
+			/* The next req may also be applied */
 			idx = in_q->rd_idx;
-			if (in_q->last_applied_idx >= 0) {
-				slot_diff = in_q->last_applied_idx - idx;
-				if (slot_diff < 0)
-					slot_diff += link->req.l_tbl->num_slots;
-			} else {
-				/* Next req at the minimum may be applied */
-				slot_diff = 1;
-			}
+			__cam_req_mgr_inc_idx(&idx, 1,
+				link->req.l_tbl->num_slots);
 
-			for (i = 0; i < slot_diff; i++) {
-				__cam_req_mgr_inc_idx(&idx, 1,
-					link->req.l_tbl->num_slots);
-
-				CAM_DBG(CAM_CRM,
-					"Recovery on idx: %d reset slot [idx: %d status: %d]",
-					in_q->rd_idx, idx, in_q->slot[idx].status);
-				if (in_q->slot[idx].status == CRM_SLOT_STATUS_REQ_APPLIED)
-					in_q->slot[idx].status = CRM_SLOT_STATUS_REQ_ADDED;
-			}
+			if (in_q->slot[idx].status == CRM_SLOT_STATUS_REQ_APPLIED)
+				in_q->slot[idx].status = CRM_SLOT_STATUS_REQ_ADDED;
 
 			spin_lock_bh(&link->link_state_spin_lock);
 			link->state = CAM_CRM_LINK_STATE_ERR;

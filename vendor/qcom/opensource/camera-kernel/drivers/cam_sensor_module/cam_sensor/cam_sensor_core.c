@@ -318,6 +318,11 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	offset = (uint32_t *)&csl_packet->payload;
 	offset += csl_packet->cmd_buf_offset / 4;
 	cmd_desc = (struct cam_cmd_buf_desc *)(offset);
+	rc = cam_packet_util_validate_cmd_desc(cmd_desc);
+	if (rc) {
+		CAM_ERR(CAM_SENSOR, "Invalid cmd desc ret: %d", rc);
+		return rc;
+	}
 
 	rc = cam_sensor_i2c_command_parser(&s_ctrl->io_master_info,
 			i2c_reg_settings, cmd_desc, 1, io_cfg);
@@ -637,10 +642,10 @@ int32_t cam_handle_mem_ptr(uint64_t handle, uint32_t cmd,
 
 	cmd_desc = (struct cam_cmd_buf_desc *)
 		((uint32_t *)&pkt->payload + pkt->cmd_buf_offset/4);
-	if (cmd_desc == NULL) {
-		CAM_ERR(CAM_SENSOR, "command descriptor pos is invalid");
-		rc = -EINVAL;
-		goto end;
+	rc = cam_packet_util_validate_cmd_desc(cmd_desc);
+	if (rc) {
+		CAM_ERR(CAM_SENSOR, "Invalid cmd desc ret: %d", rc);
+		return rc;
 	}
 
 	probe_ver = pkt->header.op_code & 0xFFFFFF;
@@ -832,6 +837,9 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 		return -ENODEV;
 	}
 #else
+	if (s_ctrl->hw_no_ops)
+		return rc;
+
 	rc = camera_io_dev_read(
 		&(s_ctrl->io_master_info),
 		slave_info->sensor_id_reg_addr,
@@ -991,12 +999,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_REG_BANK_UNLOCK);
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR, "REG_bank unlock failed");
+				cam_sensor_power_down(s_ctrl);
 				goto free_power_settings;
 			}
 			rc = delete_request(&(s_ctrl->i2c_data.reg_bank_unlock_settings));
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
 					"failed while deleting REG_bank unlock settings");
+				cam_sensor_power_down(s_ctrl);
 				goto free_power_settings;
 			}
 		}
@@ -1035,12 +1045,14 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				CAM_SENSOR_PACKET_OPCODE_SENSOR_REG_BANK_LOCK);
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR, "REG_bank lock failed");
+				cam_sensor_power_down(s_ctrl);
 				goto free_power_settings;
 			}
 			rc = delete_request(&(s_ctrl->i2c_data.reg_bank_lock_settings));
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
 					"failed while deleting REG_bank lock settings");
+				cam_sensor_power_down(s_ctrl);
 				goto free_power_settings;
 			}
 		}
@@ -1546,9 +1558,10 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		}
 
 		if (s_ctrl->i2c_data.read_settings.is_settings_valid) {
-			rc = cam_sensor_i2c_read_data(
-				&s_ctrl->i2c_data.read_settings,
-				&s_ctrl->io_master_info);
+			if (!s_ctrl->hw_no_ops)
+				rc = cam_sensor_i2c_read_data(
+					&s_ctrl->i2c_data.read_settings,
+					&s_ctrl->io_master_info);
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR, "%s: cannot read data: %d",
 					s_ctrl->sensor_name, rc);
@@ -1693,7 +1706,7 @@ int cam_sensor_power(struct v4l2_subdev *sd, int on)
 
 int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 {
-	int rc;
+	int rc = 0;
 	struct cam_sensor_power_ctrl_t *power_info;
 	struct cam_camera_slave_info *slave_info;
 	struct cam_hw_soc_info *soc_info =
@@ -1703,6 +1716,9 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_ERR(CAM_SENSOR, "failed: %pK", s_ctrl);
 		return -EINVAL;
 	}
+
+	if (s_ctrl->hw_no_ops)
+		return rc;
 
 	power_info = &s_ctrl->sensordata->power_info;
 	slave_info = &(s_ctrl->sensordata->slave_info);
@@ -1777,6 +1793,9 @@ int cam_sensor_power_down(struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_ERR(CAM_SENSOR, "failed: s_ctrl %pK", s_ctrl);
 		return -EINVAL;
 	}
+
+	if (s_ctrl->hw_no_ops)
+		return rc;
 
 	power_info = &s_ctrl->sensordata->power_info;
 	soc_info = &s_ctrl->soc_info;
@@ -1979,22 +1998,26 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			trace_begin("%d_%d_0x%x Apply Setting %d", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id, opcode);
 			list_for_each_entry(i2c_list,
 				&(i2c_set->list_head), list) {
+				if (!s_ctrl->hw_no_ops)
+				{
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-				if(cam_sensor_need_bypass_write(s_ctrl,i2c_list))
-				{
-					CAM_INFO(CAM_SENSOR," qsc setting have write  before , no need write again");
-				}
-				else
-				{
+					if(cam_sensor_need_bypass_write(s_ctrl,i2c_list))
+					{
+						CAM_INFO(CAM_SENSOR," qsc setting have write  before , no need write again");
+					}
+					else
+					{
+						rc = cam_sensor_i2c_modes_util(
+							&(s_ctrl->io_master_info),
+							i2c_list);
+					}
+#else
 					rc = cam_sensor_i2c_modes_util(
 						&(s_ctrl->io_master_info),
 						i2c_list);
-				}
-#else
-				rc = cam_sensor_i2c_modes_util(
-					&(s_ctrl->io_master_info),
-					i2c_list);
 #endif
+				}
+
 				if (rc < 0) {
 					CAM_ERR(CAM_SENSOR,
 						"Failed to apply settings: %d",
@@ -2017,9 +2040,10 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			i2c_set[offset].request_id == req_id) {
 			list_for_each_entry(i2c_list,
 				&(i2c_set[offset].list_head), list) {
-				rc = cam_sensor_i2c_modes_util(
-					&(s_ctrl->io_master_info),
-					i2c_list);
+				if (!s_ctrl->hw_no_ops)
+					rc = cam_sensor_i2c_modes_util(
+						&(s_ctrl->io_master_info),
+						i2c_list);
 				if (rc < 0) {
 					CAM_ERR(CAM_SENSOR,
 						"Failed to apply settings: %d",
@@ -2101,8 +2125,8 @@ int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 		return -EINVAL;
 	}
 
-	CAM_DBG(CAM_REQ, "trigger_point:%d Sensor[%d] update req id: %lld",
-		apply->trigger_point, s_ctrl->soc_info.index, apply->request_id);
+	CAM_DBG(CAM_REQ, " Sensor[%d] update req id: %lld",
+		s_ctrl->soc_info.index, apply->request_id);
 	trace_cam_apply_req("Sensor", s_ctrl->soc_info.index, apply->request_id, apply->link_hdl);
 	mutex_lock(&(s_ctrl->cam_sensor_mutex));
 	rc = cam_sensor_apply_settings(s_ctrl, apply->request_id,

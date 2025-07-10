@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2019, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_SENSOR_DEV_H_
@@ -111,6 +112,7 @@ struct cam_sensor_qsc_setting {
  * @pipeline_delay: Sensor pipeline delay
  * @sensor_name: Sensor name
  * @is_aon_user: To determine whether sensor is AON user or not
+ * @hw_no_ops: To determine whether HW operations need to be disabled
  */
 struct cam_sensor_ctrl_t {
 	char                           device_name[
@@ -143,6 +145,7 @@ struct cam_sensor_ctrl_t {
 	char                           sensor_name[
 		CAM_SENSOR_NAME_MAX_SIZE];
 	bool                           is_aon_user;
+	bool                           hw_no_ops;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	int                            is_read_eeprom;
 	struct mutex                   sensor_power_state_mutex;
@@ -156,7 +159,6 @@ struct cam_sensor_ctrl_t {
 	int                            pid;
 	struct cam_sensor_qsc_setting  sensor_qsc_setting;
 #endif
-
 };
 
 /**
